@@ -457,8 +457,8 @@ static int _set_thread_prio(knet_handle_t knet_h, pthread_t thread)
 {
 	int savederrno = 0;
 	struct sched_param param;
-	int policy = SCHED_RR;
-	int priority = 20;
+	int policy = SCHED_OTHER;
+	int priority = 0;
 
 	memset(&param, 0, sizeof(struct sched_param));
 
