@@ -453,6 +453,33 @@ static void _close_epolls(knet_handle_t knet_h)
 	close(knet_h->dst_link_handler_epollfd);
 }
 
+static int _set_thread_prio(knet_handle_t knet_h, pthread_t thread)
+{
+	int savederrno = 0;
+	struct sched_param param;
+	int policy = SCHED_RR;
+	int priority = 20;
+
+	memset(&param, 0, sizeof(struct sched_param));
+
+	param.sched_priority = priority;
+
+	savederrno = pthread_setschedparam(thread,
+					   policy,
+					   &param);
+
+	if (savederrno) {
+		log_err(knet_h, KNET_SUB_HANDLE, "Unable to set thread policy/priority: %s",
+			strerror(savederrno));
+		if (!(knet_h->flags & KNET_HANDLE_FLAG_PRIVILEGED)) {
+			log_warn(knet_h, KNET_SUB_HANDLE, "handle is not privileged, continue as requested");
+			savederrno = 0;
+		}
+	}
+
+	return savederrno;
+}
+
 static int _start_threads(knet_handle_t knet_h)
 {
 	int savederrno = 0;
@@ -484,11 +511,25 @@ static int _start_threads(knet_handle_t knet_h)
 		goto exit_fail;
 	}
 
+	savederrno = _set_thread_prio(knet_h, knet_h->send_to_links_thread);
+	if (savederrno) {
+		log_err(knet_h, KNET_SUB_HANDLE, "Unable to set thread TX priority: %s",
+			strerror(savederrno));
+		goto exit_fail;
+	}
+
 	set_thread_status(knet_h, KNET_THREAD_RX, KNET_THREAD_REGISTERED);
 	savederrno = pthread_create(&knet_h->recv_from_links_thread, 0,
 				    _handle_recv_from_links_thread, (void *) knet_h);
 	if (savederrno) {
 		log_err(knet_h, KNET_SUB_HANDLE, "Unable to start link to datafd thread: %s",
+			strerror(savederrno));
+		goto exit_fail;
+	}
+
+	savederrno = _set_thread_prio(knet_h, knet_h->recv_from_links_thread);
+	if (savederrno) {
+		log_err(knet_h, KNET_SUB_HANDLE, "Unable to set thread RX priority: %s",
 			strerror(savederrno));
 		goto exit_fail;
 	}
